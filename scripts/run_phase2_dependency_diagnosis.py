@@ -174,7 +174,8 @@ def main() -> int:
                 "scope": "P1 diagnosis 10 cases × 4 core counts", "algorithm_version": VERSION,
                 "scheduler_module_version": ALGORITHM_VERSION,
                 "partition_version": "p1_bounded_communication_cuts_v001",
-                "task_count": len(tasks), "fresh_evaluator_calls": len(tasks),
+                "task_count": len(tasks), "candidate_evaluator_calls": len(tasks),
+                "reused_control_records": len(tasks), "reused_candidate_records": 0,
                 "timeout_seconds": args.timeout_seconds, "official_full_manifest_scan": False}
     common.atomic_json(OUT / "round_manifest.json", manifest)
     common.write_csv(OUT / "plan_manifest.csv", [
@@ -182,9 +183,10 @@ def main() -> int:
          "parameters": json.dumps(t["parameters"], sort_keys=True),
          "plan_path": t["plan_path"].relative_to(ROOT).as_posix(), "plan_sha256": t["plan_sha"],
          "generation_seconds": t["generation_seconds"]} for t in tasks])
-    fresh = sum(prior_comm_record(task) is None for task in tasks)
-    manifest["fresh_evaluator_calls"] = fresh
-    manifest["reused_records"] = len(tasks) - fresh
+    # The old greedy schedules are read as comparison controls; the list-schedule
+    # plans differ and therefore every candidate requires a fresh evaluator call.
+    manifest["fresh_evaluator_calls"] = len(tasks)
+    manifest["reused_records"] = 0
     common.atomic_json(OUT / "round_manifest.json", manifest)
     print(f"Prepared {len(tasks)} fixed-partition plans; {len(tasks)-fresh} greedy controls reusable; {fresh} new list-scheduling evaluator calls.", flush=True)
     common.VERSION = VERSION

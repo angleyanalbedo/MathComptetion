@@ -15,16 +15,16 @@ MANIFEST = ROOT / "protection" / "official-files.sha256"
 
 def protected_files() -> dict[str, Path]:
     files: dict[str, Path] = {"README.md": ROOT / "README.md"}
-    for folder in ("code", "docs"):
+    for folder in ("official/code", "official/docs"):
         base = ROOT / folder
         if base.exists():
             for path in base.rglob("*"):
-                if path.is_file():
+                if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc":
                     files[path.relative_to(ROOT).as_posix()] = path
-    config = ROOT / "data" / "config.txt"
+    config = ROOT / "official" / "data" / "config.txt"
     if config.exists():
-        files["data/config.txt"] = config
-    for path in (ROOT / "data").glob("case_*.json"):
+        files["official/data/config.txt"] = config
+    for path in (ROOT / "official" / "data").glob("case_*.json"):
         files[path.relative_to(ROOT).as_posix()] = path
     return files
 

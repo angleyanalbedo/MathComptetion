@@ -15,7 +15,7 @@ Use this skill for the contest project in this workspace. Read the project `agen
 - The solution maps every non-`COPY_IN`/`COPY_OUT` op id to a subgraph id, then lists each subgraph exactly once in a per-core schedule.
 - Problem 1 is scene A: every subgraph is its own Task and boundary data passes through DDR.
 - Problems 2 and 3 are scene B: each core's subgraphs form one Task; same-core data may remain in L1/UB, while cross-core data incurs copies and synchronization. Problem 3 adds the shared read-only FIFO L2 cache.
-- Preserve the supplied `data/config.txt` and evaluator behavior. Never treat estimates from graph profiling as evaluator results.
+- Treat `official/` as read-only: preserve `official/data/config.txt`, all supplied graphs, and evaluator behavior. Never treat estimates from graph profiling as evaluator results.
 
 ## Workflow
 

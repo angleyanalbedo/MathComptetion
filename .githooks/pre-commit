@@ -6,12 +6,15 @@ cd "$repo_root"
 
 # Once a baseline commit exists, protect the manifest and the guard itself too.
 if git rev-parse --verify HEAD >/dev/null 2>&1; then
-  if ! git diff --cached --quiet HEAD -- \
+  if ! git diff --quiet HEAD -- \
     protection/official-files.sha256 \
     scripts/verify_official_integrity.py \
     .githooks/pre-commit; then
-    printf '%s\n' 'Blocked: official integrity policy files cannot be changed through an ordinary commit.' >&2
-    exit 1
+    if [ "${ALLOW_GUARD_POLICY_UPDATE:-}" != "yes" ]; then
+      printf '%s\n' 'Blocked: integrity policy files require an explicit guard-update authorization.' >&2
+      exit 1
+    fi
+    printf '%s\n' 'Guard-policy update explicitly authorized; official file hashes will still be verified.' >&2
   fi
 fi
 

@@ -20,7 +20,7 @@
 ## Pending
 
 - [x] 检查 100 个正式 case 是否均能被读取
-- [ ] 建立官方文件 Git 基线并启用提交保护钩子
+- [x] 建立官方文件 Git 基线并启用提交保护钩子
 - [ ] 运行最小图和 stub 方案，确认评估接口
 - [ ] 运行 `singlecore_evaluate.py` 建立单核基线
 - [ ] 实现并记录 Phase 1 baseline
@@ -42,6 +42,7 @@
 | version | phase | scope | seed | result | status |
 |---|---|---|---:|---|---|
 | v001 | Phase 0 | 100 cases graph profile; outputs in `experiments/graph-profile-v1/` | 0 | 100/100 parsed; no evaluator metrics collected | complete |
+| v002 | Phase 0 | Commit official baseline and enable pre-commit integrity guard | 0 | 114 official files verified; raw case files excluded from Git and hash-protected | complete |
 
 ## Rules for updating this file
 

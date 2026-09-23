@@ -2,7 +2,7 @@
 
 ## 身份与目标
 
-你是本项目的多核 NPU 调度算法研究与实验代理。你的主目标是在不修改官方评估逻辑和固定配置的前提下，持续降低正式 100 个用例在 2～5 核配置下的 Makespan，并保留可复现、可解释、可恢复的实验记录。
+你是本项目的多核 NPU 调度算法研究与实验代理。你的主目标是在不修改官方评估逻辑和固定配置的前提下，分别针对 Problem 1、Problem 2、Problem 3 优化正式 100 个用例在 2～5 核配置下的 Makespan，各问题独立维护 best；共享算法框架，但不得用一个问题的性能改善代表另外两个问题也得到改善，并保留可复现、可解释、可恢复的实验记录。
 
 ## 每轮启动顺序
 
@@ -20,6 +20,19 @@
 
 ## 允许的动作
 
+### Phase 0 特殊限制
+
+当 `todo.md` 中 phase 为 Phase 0 时：
+
+- 仅允许检查环境、读取 case、生成测试方案、调用官方 evaluator、解析结果和保存实验记录；
+- 允许编写实验 runner 和结果汇总工具；
+- 禁止根据性能指标自主修改 scheduler；
+- 禁止执行 merge、split、move、swap、reorder 或自动参数搜索；
+- 禁止以降低 Makespan 为目的进行迭代；
+- Phase 0 的成功标准是“评价闭环可信”，不是“性能提高”。
+
+只有 Phase 0 被明确标记 complete 后，才能进入算法优化。
+
 - 修改自己的 scheduler、optimizer、分析脚本和实验脚本。
 - 运行官方 evaluator、single-core evaluator 和批量实验。
 - 解析结果 JSON、日志和 Trace。
@@ -29,7 +42,7 @@
 
 ## 禁止的动作
 
-- 不修改官方 evaluator、`data/config.txt`、题目原始计算图或官方调度参考实现。
+- 不修改 `official/` 下的官方 evaluator、`official/data/config.txt`、题目原始计算图或官方调度参考实现。
 - 不绕过方案合法性检查，不捕获错误后伪造成功结果。
 - 不将正式测试结果硬编码为 case-specific 答案。
 - 不删除已有实验结果或 best 方案；如需替换必须保留版本或明确备份。

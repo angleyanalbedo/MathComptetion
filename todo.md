@@ -2,11 +2,11 @@
 
 ## Current status
 
-- phase: Phase 0 环境与接口确认
+- phase: Phase 1 共享 baseline
 - state: in_progress
-- best_algorithm: 未建立
-- best_version: 未建立
-- last_experiment: v001_case_graph_profile
+- best_algorithm: topology_contiguous_64_greedy_cycles
+- best_version: v001_pending_validation
+- last_experiment: v004_case_019_evaluator_smoke
 
 ## Current best
 
@@ -21,11 +21,25 @@
 
 - [x] 检查 100 个正式 case 是否均能被读取
 - [x] 建立官方文件 Git 基线并启用提交保护钩子
-- [ ] 运行最小图和 stub 方案，确认评估接口
-- [ ] 运行 `singlecore_evaluate.py` 建立单核基线
-- [ ] 实现并记录 Phase 1 baseline
-- [ ] 建立问题 1～3 的批量结果汇总
-- [x] 选择代表性 case 并生成 case profile
+- [x] 将官方原件集中迁移到 `official/`，算法与实验目录分离
+- [x] 运行最小正式 case 和 stub 方案，确认方案生成接口
+- [x] 对 `case_019` 运行 `singlecore_evaluate.py`，确认单核基线接口
+- [x] 对同一方案运行问题 1、2、3 官方评估器，核对结果/日志/Trace 输出
+- [x] 确认官方 100 个 case 与配置只读，评估前后 114 项哈希均通过
+- [x] Phase 0 环境与接口确认完成（保留历史记录）
+- [ ] 更新算法/实验计划与 Phase 1 全部满足式验收条件
+- [ ] 实现 v001 图读取、含 COPY 路径的完整 op DAG 与稳定拓扑排序
+- [ ] 实现固定 64-op 拓扑连续切图和最小累计 cycles greedy 核分配
+- [ ] 合成图测试：链、分支汇聚、独立分支、COPY 路径、循环拒绝、同输入确定性
+- [ ] 实现带哈希指纹和成功断点续跑的单 case / batch runner
+- [ ] 选择代表性正式图，验证 2/3/4/5 核 × P1/P2/P3
+- [ ] 冻结 v001 参数并运行 100 个正式单核评估
+- [ ] 运行 100 cases × 4 核 × 3 problems（1200 项）
+- [ ] 生成逐项 CSV、12 组汇总、三问独立 case/core best 和瓶颈分析
+- [ ] 全部满足 Phase 1 验收条件后才标记 complete
+
+## Phase 1+ 优化待办
+
 - [ ] 测试 critical-path priority
 - [ ] 测试 communication-weighted merge
 - [ ] 测试 cache-aware merge/split
@@ -41,8 +55,10 @@
 
 | version | phase | scope | seed | result | status |
 |---|---|---|---:|---|---|
-| v001 | Phase 0 | 100 cases graph profile; outputs in `experiments/graph-profile-v1/` | 0 | 100/100 parsed; no evaluator metrics collected | complete |
+| v001 | Phase 0 | 100 cases graph profile; outputs in `experiments/phase0/graph-profile-v1/` | 0 | 100/100 parsed; no evaluator metrics collected | complete |
 | v002 | Phase 0 | Commit official baseline and enable pre-commit integrity guard | 0 | 114 official files verified; raw case files excluded from Git and hash-protected | complete |
+| v003 | Phase 0 | Move official files under `official/`; reserve `src/` for scheduler; move graph profile under `experiments/phase0/` | 0 | Path references and integrity guard updated; evaluator loop not yet run | complete |
+| v004 | Phase 0 | `case_019` (766 ops; stub plan: 647 compute ops, 10 subgraphs, 4 cores); single-core + problems 1–3 | 0 | All four evaluator runs exited 0; output fields, JSON/log/Trace paths and official hashes verified; one-case smoke only, not benchmark baseline | complete |
 
 ## Rules for updating this file
 

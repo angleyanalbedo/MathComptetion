@@ -2,21 +2,25 @@
 
 "华为杯"数学建模比赛A题评估代码
 
+项目结构：官方原件位于 `official/`，自己的算法放在 `src/`，实验入口和完整性校验工具放在 `scripts/`，实验结果放在 `experiments/`。不要编辑 `official/` 内的文件。
+
 ## 最常用的四条命令
 
 在项目根目录运行：
 
 ```powershell
-python code/stub_multicore_cut_and_schedule.py <计算图.json> -n 4
-python code/multicore_cut_evaluate_problem_1.py <计算图.json> <方案.json> --config data/config.txt
-python code/multicore_cut_evaluate_problem_2.py <计算图.json> <方案.json> --config data/config.txt
-python code/multicore_cut_evaluate_problem_3.py <计算图.json> <方案.json> --config data/config.txt
+python official/code/stub_multicore_cut_and_schedule.py <计算图.json> -n 4
+python official/code/multicore_cut_evaluate_problem_1.py <计算图.json> <方案.json> --config official/data/config.txt
+python official/code/multicore_cut_evaluate_problem_2.py <计算图.json> <方案.json> --config official/data/config.txt
+python official/code/multicore_cut_evaluate_problem_3.py <计算图.json> <方案.json> --config official/data/config.txt
 ```
 
 省略 `<方案.json>` 时，脚本读取与计算图同目录的
 `<计算图文件名>_multicore_res.json`。每个评估器输出结果 JSON、简短日志和
 Perfetto Trace。`stub_multicore_cut_and_schedule.py` 只演示方案格式，不是
 基线算法。
+
+同一份方案可以用于 P1/P2/P3 的接口验证，但正式求解允许并应针对三个问题分别生成不同方案；三个 evaluator 的共同输入格式不代表三问要求共用同一最优方案。
 
 ## 从输入到 makespan 的完整流程
 
@@ -81,13 +85,13 @@ Perfetto Trace。`stub_multicore_cut_and_schedule.py` 只演示方案格式，�
 
 |文件|作用|建议阅读对象|
 |---|---|---|
-|`contest_io.py`|统一命令行、JSON、日志和 Trace|想了解输入输出的同学|
-|`evaluation_validation.py`|选手输入及全局执行依赖校验|理解不可执行方案的诊断|
-|`multicore_cut_evaluate_problem_1.py`|问题 1：每子图一个 Task|解答问题 1|
-|`multicore_cut_evaluate_problem_2.py`|问题 2：每核心一个 Task|解答问题 2|
-|`multicore_cut_evaluate_problem_3.py`|问题 3：增加只读 FIFO Cache|解答问题 3|
-|`schedule_step1.py`|无环图的核内访问顺序|理解拓扑调度|
-|`schedule_step2.py`|片上容量与 Spill 插入|理解内存约束|
-|`schedule_step3.py`|乱序排布、逐 Pipe 顺序和内存复用补边|理解执行依赖|
-|`stub_multicore_cut_and_schedule.py`|方案格式校验及随机示例|第一次运行代码|
-|`singlecore_evaluate.py`|单核基线|计算加速比|
+|`official/code/contest_io.py`|统一命令行、JSON、日志和 Trace|想了解输入输出的同学|
+|`official/code/evaluation_validation.py`|选手输入及全局执行依赖校验|理解不可执行方案的诊断|
+|`official/code/multicore_cut_evaluate_problem_1.py`|问题 1：每子图一个 Task|解答问题 1|
+|`official/code/multicore_cut_evaluate_problem_2.py`|问题 2：每核心一个 Task|解答问题 2|
+|`official/code/multicore_cut_evaluate_problem_3.py`|问题 3：增加只读 FIFO Cache|解答问题 3|
+|`official/code/schedule_step1.py`|无环图的核内访问顺序|理解拓扑调度|
+|`official/code/schedule_step2.py`|片上容量与 Spill 插入|理解内存约束|
+|`official/code/schedule_step3.py`|乱序排布、逐 Pipe 顺序和内存复用补边|理解执行依赖|
+|`official/code/stub_multicore_cut_and_schedule.py`|方案格式校验及随机示例|第一次运行代码|
+|`official/code/singlecore_evaluate.py`|单核基线|计算加速比|

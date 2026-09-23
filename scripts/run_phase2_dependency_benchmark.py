@@ -148,6 +148,8 @@ def main() -> int:
     parser.add_argument("--scope", choices=("validation", "full"), default="validation")
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--timeout-seconds", type=float, default=600)
+    parser.add_argument("--retain-trace-cases", default="",
+                        help="comma-separated cases whose successful Trace files should be kept")
     args = parser.parse_args()
     if args.workers < 1 or args.timeout_seconds <= 0:
         parser.error("workers and timeout must be positive")
@@ -156,8 +158,13 @@ def main() -> int:
         raise RuntimeError("candidate is not frozen for validation")
     out = OUT if args.scope == "validation" else FULL_OUT
     case_ids = frozen["validation_case_ids"] if args.scope == "validation" else sorted(common.official_cases())
+    retain_trace_cases = {name.strip() for name in args.retain_trace_cases.split(",") if name.strip()}
+    if retain_trace_cases - set(case_ids):
+        parser.error(f"Trace retention requested for cases outside this run: {sorted(retain_trace_cases - set(case_ids))}")
     out.mkdir(parents=True, exist_ok=True)
     tasks = prepare_tasks(case_ids, frozen["candidate"], out)
+    for task in tasks:
+        task["retain_trace"] = task["case"] in retain_trace_cases
     common.VERSION = VERSION
     records = []
     eval_tasks = []
@@ -167,7 +174,8 @@ def main() -> int:
             sources = [ROUND4 / "cases" / task["case"] / f"cores_{task['cores']}" / task["spec"]["name"] / "record.json",
                        OUT / "cases" / task["case"] / f"cores_{task['cores']}" / task["spec"]["name"] / "record.json"]
             for src in sources:
-                record = common.valid_existing_record(src, task["fingerprint"])
+                record = common.valid_existing_record(
+                    src, task["fingerprint"], require_trace=bool(task.get("retain_trace", False)))
                 if record:
                     record = {**record, "reused": True, "source_record": src.relative_to(ROOT).as_posix()}
                     common.atomic_json(task["candidate_dir"] / "record.json", record)
@@ -184,6 +192,9 @@ def main() -> int:
         "candidate": frozen["candidate"], "case_count": len(case_ids),
         "record_count": len(tasks), "reused_fingerprint_records": reused,
         "new_evaluator_calls": len(eval_tasks), "timeout_seconds": args.timeout_seconds,
+        "trace_policy": {"default": "temporary_then_discard",
+                         "retained_cases": sorted(retain_trace_cases),
+                         "failures": "discard_unless_explicitly_requested"},
         "full_official_manifest_scan": False})
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         futures = {pool.submit(common.run_eval, task, args.timeout_seconds): task for task in eval_tasks}

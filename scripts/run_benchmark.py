@@ -76,11 +76,14 @@ def main() -> int:
     parser.add_argument("--timeout-seconds", type=float, default=600.0)
     parser.add_argument("--workers", type=int, default=min(4, max(1, (os.cpu_count() or 2) - 1)),
                         help="parallel evaluator processes; default reserves CPU capacity")
+    parser.add_argument("--retain-trace-cases", default="",
+                        help="comma-separated case IDs to retain Trace for; successful others are discarded")
     args = parser.parse_args()
     if args.timeout_seconds <= 0:
         parser.error("--timeout-seconds must be positive")
     if args.workers <= 0:
         parser.error("--workers must be positive")
+    retain_trace_cases = {name.strip() for name in args.retain_trace_cases.split(",") if name.strip()}
 
     output_root = args.output_root.resolve()
     if not output_root.is_relative_to(ROOT):
@@ -89,6 +92,9 @@ def main() -> int:
     case_paths = sorted((ROOT / "official" / "data").glob("case_*.json"))
     if len(case_paths) != 100:
         raise RuntimeError(f"expected exactly 100 official graph files; found {len(case_paths)}")
+    unknown_trace_cases = retain_trace_cases - {path.stem for path in case_paths}
+    if unknown_trace_cases:
+        parser.error(f"unknown case IDs in --retain-trace-cases: {sorted(unknown_trace_cases)}")
     ensure_experiment_manifest(output_root, case_paths, args.timeout_seconds)
 
     if args.mode == "representative":
@@ -108,6 +114,9 @@ def main() -> int:
                 "selection_source": "Phase 0 graph profile; labels are selection criteria only, not evaluator measurements",
                 "cases": {name: labels for name, labels in tags.items()},
             })
+    unselected_trace_cases = retain_trace_cases - {path.stem for path in selected}
+    if unselected_trace_cases:
+        parser.error(f"Trace retention requested for cases outside this run: {sorted(unselected_trace_cases)}")
 
     invocation = {
         "mode": args.mode,
@@ -115,6 +124,9 @@ def main() -> int:
         "timeout_seconds": args.timeout_seconds,
         "workers": args.workers,
         "selected_cases": [path.stem for path in selected],
+        "trace_policy": {"default": "temporary_then_discard",
+                         "retained_cases": sorted(retain_trace_cases),
+                         "failures": "discard_unless_explicitly_requested"},
     }
     atomic_json(output_root / "last_invocation.json", invocation)
     print(f"START mode={args.mode} cases={len(selected)} timeout={args.timeout_seconds}s "
@@ -135,6 +147,7 @@ def main() -> int:
                 case_dir=case_dir, timeout_seconds=args.timeout_seconds,
                 input_hash=graph_hash, generation_seconds=None,
                 integrity_scope="none",
+                retain_trace=graph_path.stem in retain_trace_cases,
             ): graph_path.stem
             for graph_path, case_dir, graph_hash in singles_to_run
         }
@@ -166,6 +179,7 @@ def main() -> int:
                 case_dir=case_dir, timeout_seconds=args.timeout_seconds,
                 input_hash=graph_hash, generation_seconds=generation_seconds,
                 integrity_scope="none",
+                retain_trace=graph_path.stem in retain_trace_cases,
             ): (graph_path.stem, problem, cores)
             for graph_path, plan_path, problem, cores, case_dir, graph_hash, generation_seconds in multi_tasks
         }

@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -96,7 +98,7 @@ def _outputs_intact(record: dict) -> bool:
     return bool(record.get("output_sha256"))
 
 
-def _reusable_success(parent: Path, fingerprint: dict) -> dict | None:
+def _reusable_success(parent: Path, fingerprint: dict, require_trace: bool = False) -> dict | None:
     for attempt_dir in reversed(_attempt_dirs(parent)):
         record_path = attempt_dir / "record.json"
         if not record_path.is_file():
@@ -111,8 +113,52 @@ def _reusable_success(parent: Path, fingerprint: dict) -> dict | None:
         if (record.get("fingerprint") == fingerprint and record.get("status") == "success"
                 and integrity_ok
                 and _outputs_intact(record)):
+            if require_trace and not record.get("trace_retained"):
+                legacy_trace = any(Path(path).name == "trace.json"
+                                   for path in record.get("output_paths", []))
+                if not legacy_trace:
+                    continue
             return {**record, "reused": True, "record_path": str(record_path)}
     return None
+
+
+def invoke_with_trace_policy(command: list[str], trace_path: Path, output_path: Path,
+                             timeout_seconds: float, retain_trace: bool = False) -> dict:
+    """Run an evaluator with a transient trace; retain only on explicit request."""
+    started = time.perf_counter()
+    return_code: int | None = None
+    stdout = stderr = ""
+    timed_out = False
+    trace_status = "not_generated"
+    with tempfile.TemporaryDirectory(prefix="ap_multicore_trace_") as temporary_dir:
+        temporary_trace = Path(temporary_dir) / "trace.json"
+        actual_command = [str(temporary_trace) if item == str(trace_path) else item
+                          for item in command]
+        try:
+            proc = subprocess.run(
+                actual_command, cwd=ROOT, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=timeout_seconds,
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}, check=False,
+            )
+            return_code, stdout, stderr = proc.returncode, proc.stdout, proc.stderr
+        except subprocess.TimeoutExpired as exc:
+            timed_out = True
+            stdout = exc.stdout.decode("utf-8", "replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+            stderr = exc.stderr.decode("utf-8", "replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        elapsed = time.perf_counter() - started
+        if temporary_trace.is_file():
+            if retain_trace:
+                trace_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(temporary_trace, trace_path)
+                trace_status = "retained_requested"
+            else:
+                trace_status = "generated_discarded"
+        recorded_command = ["<TEMP_TRACE_PATH>" if item == str(temporary_trace) else item
+                            for item in actual_command]
+    return {"command": recorded_command, "return_code": return_code,
+            "stdout": stdout, "stderr": stderr, "timed_out": timed_out,
+            "elapsed_seconds": elapsed, "trace_status": trace_status,
+            "trace_retained": trace_status.startswith("retained_")}
 
 
 def _next_attempt(parent: Path) -> Path:
@@ -151,6 +197,7 @@ def run_one_evaluator(
     case_dir: Path, timeout_seconds: float, input_hash: str,
     generation_seconds: float | None, force: bool = False,
     integrity_scope: str = "none", batch_id: str | None = None,
+    retain_trace: bool = False,
 ) -> dict:
     if integrity_scope not in ("per_evaluator", "batch", "none"):
         raise ValueError(f"unsupported integrity scope: {integrity_scope}")
@@ -187,7 +234,7 @@ def run_one_evaluator(
         "command_template": command_fingerprint,
     }
     if not force:
-        cached = _reusable_success(parent, fingerprint)
+        cached = _reusable_success(parent, fingerprint, require_trace=retain_trace)
         if cached:
             print(f"REUSE {graph_path.stem} {problem} cores={record_cores}", flush=True)
             return cached
@@ -206,31 +253,21 @@ def run_one_evaluator(
     precheck_seconds = 0.0
     postcheck_seconds = 0.0
     stdout = stderr = ""
-    return_code: int | None = None
-    elapsed = 0.0
-    timeout = False
     if integrity_scope == "per_evaluator":
         precheck_seconds, pre_out, _pre_err = verify_official()
     elif integrity_scope == "batch":
         precheck_seconds, pre_out = 0.0, f"covered by batch preflight {batch_id}"
     else:
         precheck_seconds, pre_out = 0.0, "full official manifest scan disabled by read-only/Git-hook project policy"
-    timer = time.perf_counter()
-    try:
-        proc = subprocess.run(
-            command, cwd=ROOT, capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=timeout_seconds,
-            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}, check=False,
-        )
-        return_code, stdout, stderr = proc.returncode, proc.stdout, proc.stderr
-    except subprocess.TimeoutExpired as exc:
-        timeout = True
-        stdout = exc.stdout.decode("utf-8", "replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
-        stderr = exc.stderr.decode("utf-8", "replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
-    finally:
-        elapsed = time.perf_counter() - timer
-        _write_capture(stdout_path, stdout)
-        _write_capture(stderr_path, stderr)
+    invocation = invoke_with_trace_policy(command, trace_path, output_path,
+                                          timeout_seconds, retain_trace=retain_trace)
+    command = invocation["command"]
+    return_code = invocation["return_code"]
+    stdout, stderr = invocation["stdout"], invocation["stderr"]
+    timeout = invocation["timed_out"]
+    elapsed = invocation["elapsed_seconds"]
+    _write_capture(stdout_path, stdout)
+    _write_capture(stderr_path, stderr)
     if integrity_scope == "per_evaluator":
         postcheck_seconds, post_out, post_err = verify_official()
     elif integrity_scope == "batch":
@@ -281,6 +318,8 @@ def run_one_evaluator(
         "exit_code": return_code,
         "timeout_seconds": timeout_seconds,
         "timeout": timeout,
+        "trace_status": invocation["trace_status"],
+        "trace_retained": invocation["trace_retained"],
         "generation_seconds": generation_seconds,
         "evaluator_seconds": round(elapsed, 6),
         "integrity_check_seconds": round(precheck_seconds + postcheck_seconds, 6),

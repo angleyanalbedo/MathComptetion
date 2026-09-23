@@ -16,11 +16,12 @@
 | 阶段 | 实验状态 | 归档核验 | 归档位置 | 精简状态与清单 |
 |---|---|---|---|---|
 | Phase 0 | complete | pending：尚未做精简前核验 | `experiments/phase0/` | 未登记精简；核验前不清理 |
-| Phase 1 | complete | pending：尚未做精简前核验 | `experiments/phase1_baseline/v001/` | 未登记精简；核验前不清理 |
-| Phase 2 | complete | pending：尚未做精简前核验 | `experiments/phase2_problem1/final/` | 未登记精简；核验前不清理 |
+| Phase 1 | complete | verified：`experiments/phase1_baseline/v001/TRACE_ARCHIVE_AUDIT.md` | `experiments/phase1_baseline/v001/` | 已清理 1,279 个非关键 Trace（4,150,490,176 B）；保留 21 个代表 Trace；清单：`experiments/phase1_baseline/v001/trace_cleanup_manifest.csv` |
+| Phase 2 | complete | verified：final closeout + `ROUND_ARCHIVE_COMPACTION.md` + `ROUND8_RESTORATION_AUDIT.md` | `experiments/phase2_problem1/final/` | 中间历史轮次精简；保留 final 与 round8 best full。先删除 21,214 个文件，随后恢复 round8 2,800 个文件；净减少 21,038,867,101 B。清单：`round_compaction_manifest.csv` |
 | Phase 3～6 | not_started | not_applicable | 待阶段启动后分别登记 | 不适用 |
 
-- [ ] P1 收尾完成后，核验阶段归档与复现依据、统计空间分布，生成精简清单；按 `agent.md` 执行并登记实际释放空间，勿影响结果复用
+- [x] P1 收尾完成后核验归档与复现依据；生成 Trace 精简清单并逐项校验 SHA-256 后清理，释放 11,175,816,124 B；保留汇总、方案、结果及 9 个代表 Trace。核验记录：`experiments/phase2_problem1/final/TRACE_ARCHIVE_AUDIT.md`
+- [x] 按用户要求精简 Phase 2 历史中间轮次 case 目录；保留 final 及当前 round8 best full。round8 原先误被纳入精简，之后由匹配历史 plan 哈希的 400 份方案重建并重跑 P1 evaluator，400/400 成功且 Makespan 与历史逐项一致。净减少 21,038,867,101 B。审计：`experiments/phase2_problem1/final/ROUND_ARCHIVE_COMPACTION.md`、`ROUND8_RESTORATION_AUDIT.md`
 
 ## Current best
 
@@ -139,7 +140,7 @@
 - [x] 基于当前 critical-path best，单独验证后继工作量 priority（40/40成功；等权 speedup 2.05954 vs 2.05935 仅+0.009%；40项中3项改善、37项持平/退化，case_014/5核+3.695%，拒绝进入 validation）
 - [x] 单独验证 Cube/Vector 分 Pipe 工作量优先级（diagnosis40/40、validation40/40、full400/400 success；全量等权 speedup 1.948976 vs 1.948670 (+0.016%)；按预定数值 Best 规则登记，但记录广泛 case/core 退化与最差 +4.006%）
 - [ ] 【暂缓、未验证；不属于本次收尾必做项】通用缓存/片上容量压力感知切图；单切点负结果不足以否定整个方向，不继续手工扫描切点
-- [x] 缓存感知先导：case_067 × 2 核单切点扰动诊断；切点 1836→1780、56 个 op 从子图 6 移至 7，core_schedules 原样固定；官方 P1 1/1 合法。spill -80,000 B，但 Makespan +474,576（+1.462%），partition extra +16,384 B，总额外搬运 -63,616 B；按预先约束拒绝该扰动。只否定本切点选择，不代表缓存方向无效。记录：`experiments/phase2_problem1/round9_cutpoint_perturbation/case_067/cores_2/`。
+- [x] 缓存感知先导：case_067 × 2 核单切点扰动诊断；切点 1836→1780、56 个 op 从子图 6 移至 7，core_schedules 原样固定；官方 P1 1/1 合法。spill -80,000 B，但 Makespan +474,576（+1.462%），partition extra +16,384 B，总额外搬运 -63,616 B；按预先约束拒绝该扰动。只否定本切点选择，不代表缓存方向无效。结论：`experiments/phase2_problem1/round9_cutpoint_perturbation/round9_summary.md`。
 - [x] Diagnosis 筛选后冻结 Pipe critical-path 候选并完成 validation 与 400 项 P1 全量评估；无 validation-driven 调参
 - [x] 按四个核数分别报告平均 speedup、等权总体均值及逐 case 退化，round8 按预定 Best 规则保留为 P1 best
 - [x] 对最终组合完成定义明确的移除消融；round6/round2 精确复用，其余缺失项各 400/400 成功
@@ -165,7 +166,7 @@
 
 ## Failed ideas
 
-- `round9_cutpoint_perturbation`：case_067×2 固定核心队列，仅移动切点 1836→1780；官方合法，但 Makespan +1.462%，即使 spill -80,000 B、总额外搬运 -63,616 B 仍拒绝。只否定该位置选择；通用缓存感知未验证。结果：`experiments/phase2_problem1/round9_cutpoint_perturbation/case_067/cores_2/`。
+- `round9_cutpoint_perturbation`：case_067×2 固定核心队列，仅移动切点 1836→1780；官方合法，但 Makespan +1.462%，即使 spill -80,000 B、总额外搬运 -63,616 B 仍拒绝。只否定该位置选择；通用缓存感知未验证。结论：`experiments/phase2_problem1/round9_cutpoint_perturbation/round9_summary.md`。
 - `cumulative_cycles_contiguous_cuts_v001`：固定 10-case diagnosis 上等权 mean speedup 1.177948，低于 communication-cut 1.728536 和 fixed-256 1.702469；3/4/5 核相对 v001 平均 Makespan 分别 +30.787%/+39.437%/+62.352%。不进入 validation、不做全量、不调参。结果：`experiments/phase2_problem1/round3_cycles/`。
 - `p1_dag_strong_edge_aggregation_v001`：diagnosis 40/40 success；等权 mean speedup 1.851547，低于当前 dependency-list best 的 diagnosis 1.975450；vs current best mean Makespan change by 2/3/4/5 cores = +12.059%/+16.953%/+23.261%/+21.048%。case_027/4-core退化约+219.228%；added-copy仅小幅下降，拒绝进入 validation。结果：`experiments/phase2_problem1/round5_dag_partition/`。
 - `p1_successor_work_priority_round7_v001`：fixed diagnosis 40/40 success; equal-weight speedup 2.05954 vs critical-path current-best 2.05935 (+0.009%), only 3/40 improved and case_014/5-core regresses +3.695%; too small and inconsistent to justify validation. Results: `experiments/phase2_problem1/round7_successor_work/`.
@@ -197,7 +198,7 @@
 | v021 | Phase 2 P1 | fixed critical-path best; Cube/Vector Pipe-work priority diagnosis | none | Official execution model confirms independent `PIPE_M`/`PIPE_V` executors; compute cycles are pipe durations while COPYs use bandwidth and are excluded from Task pipe sums. Implemented path tail with per-Task `max(PIPE_M, PIPE_V)` and critical-path successor recurrence; total-cycle release estimates unchanged. 20 unit tests pass; diagnosis 40/40 success, equal-weight speedup 2.06338 vs 2.05935 (+0.196%); frozen for validation. Artifacts: `experiments/phase2_problem1/round8_cube_vector_pipe/`. | complete |
 | v022 | Phase 2 P1 | frozen Cube/Vector pipe-tail candidate; 10 validation cases × 4 cores | none | 40/40 evaluator success; equal-weight speedup 1.86921 vs current-best control 1.86469 (+0.242%); core 3 average slightly worse and other cores near-tied/improved; no validation-driven changes. Frozen for full benchmark. Artifacts: `experiments/phase2_problem1/round8_cube_vector_pipe_validation/`. | complete |
 | v023 | Phase 2 P1 | frozen Cube/Vector pipe-tail candidate; 100 cases × 4 cores | none | 400/400 success; 80 exact diagnosis/validation records reused after input, configuration, plan fingerprint and output-hash checks; 320 fresh calls. Equal-weight speedup 1.948976 vs 1.948670 (+0.016%), so registered as marginal P1 best per predeclared numerical rule; 377/400 case×core rows tie/regress and worst is +4.006%. Artifacts: `experiments/phase2_problem1/round8_cube_vector_pipe_full/`. | complete |
-| v024 | Phase 2 P1 | case_067 × 2-core single-cutpoint perturbation; fixed original core_schedules | none | 1/1 official P1 success; moved boundary 1836→1780 (56 ops, subgraph 6→7), with core schedules unchanged. Spill 127,092,224→127,012,224 B (-80,000); partition-added bytes +16,384; total added bytes -63,616; Makespan 32,457,336→32,931,912 (+1.462%). Reject this cut; result does not disprove cache-pressure direction. Artifacts: `experiments/phase2_problem1/round9_cutpoint_perturbation/case_067/cores_2/` | complete |
+| v024 | Phase 2 P1 | case_067 × 2-core single-cutpoint perturbation; fixed original core_schedules | none | 1/1 official P1 success; moved boundary 1836→1780 (56 ops, subgraph 6→7), with core schedules unchanged. Spill 127,092,224→127,012,224 B (-80,000); partition-added bytes +16,384; total added bytes -63,616; Makespan 32,457,336→32,931,912 (+1.462%). Reject this cut; result does not disprove cache-pressure direction. Conclusion: `experiments/phase2_problem1/round9_cutpoint_perturbation/round9_summary.md` | complete |
 | v025 | Phase 2 P1 closeout | final-composition removal ablations and archival audit | none | 2 missing ablations × 400/400 P1 success; round6 and round2 reused after plan/fingerprint/output-hash checks; 7 variants audited; round8 retained at equal-weight mean speedup 1.94897594; exact round8-vs-round6 counts 23 improved/348 tied/29 regressed; artifact and raw-output audit passed. Cache pressure deferred, unverified. P2/P3 not run. Outputs: `experiments/phase2_problem1/final/` | complete |
 
 ## Rules for updating this file

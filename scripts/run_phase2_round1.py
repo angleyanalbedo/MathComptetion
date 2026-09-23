@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from experiment_runner import (CONFIG, OFFICIAL, evaluator_fingerprint,
-                               sha256_file, source_fingerprint)
+                               invoke_with_trace_policy, sha256_file, source_fingerprint)
 from src.graph_io import load_graph
 from src.scheduler import ALGORITHM_VERSION, build_plan
 from src.topology import topological_ops
@@ -430,7 +430,8 @@ def build_ledgers(samples: dict, specs: list[dict]) -> None:
     })
 
 
-def valid_existing_record(path: Path, fingerprint: dict) -> dict | None:
+def valid_existing_record(path: Path, fingerprint: dict,
+                         require_trace: bool = False) -> dict | None:
     if not path.is_file():
         return None
     try:
@@ -439,6 +440,11 @@ def valid_existing_record(path: Path, fingerprint: dict) -> dict | None:
         return None
     if record.get("fingerprint") == fingerprint and record.get("status") == "success" \
             and record.get("integrity_status") in ("verified", "not_scanned_readonly_git_hook"):
+        if require_trace and not record.get("trace_retained"):
+            legacy_trace = any(Path(rel).name == "trace.json"
+                               for rel in record.get("output_sha256", {}))
+            if not legacy_trace:
+                return None
         if all((ROOT / rel).is_file() and sha256_file(ROOT / rel) == h
                for rel, h in record.get("output_sha256", {}).items()):
             return record
@@ -473,20 +479,14 @@ def run_eval(task: dict, timeout: float) -> dict:
     command = [sys.executable, str(evaluator), str(graph_path), str(plan_path), "--config", str(CONFIG),
                "-o", str(outputs["result"]), "--trace-output", str(outputs["trace"]),
                "--log-output", str(outputs["log"])]
-    started = time.perf_counter()
-    timed_out = False
-    code = None
-    stdout = stderr = ""
-    try:
-        process = subprocess.run(command, cwd=ROOT, capture_output=True, text=True,
-                                 encoding="utf-8", errors="replace", timeout=timeout,
-                                 env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}, check=False)
-        code, stdout, stderr = process.returncode, process.stdout, process.stderr
-    except subprocess.TimeoutExpired as exc:
-        timed_out = True
-        stdout = exc.stdout.decode("utf-8", "replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
-        stderr = exc.stderr.decode("utf-8", "replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
-    elapsed = time.perf_counter() - started
+    invocation = invoke_with_trace_policy(
+        command, outputs["trace"], outputs["result"], timeout,
+        retain_trace=bool(task.get("retain_trace", False)))
+    command = invocation["command"]
+    timed_out = invocation["timed_out"]
+    code = invocation["return_code"]
+    stdout, stderr = invocation["stdout"], invocation["stderr"]
+    elapsed = invocation["elapsed_seconds"]
     outputs["stdout"].write_text(stdout, encoding="utf-8", errors="replace")
     outputs["stderr"].write_text(stderr, encoding="utf-8", errors="replace")
     result = {}
@@ -514,6 +514,8 @@ def run_eval(task: dict, timeout: float) -> dict:
               "status": evaluator_status, "integrity_status": "not_scanned_readonly_git_hook",
               "integrity_batch_id": None, "timeout_seconds": timeout,
               "timeout": timed_out, "exit_code": code, "evaluator_seconds": round(elapsed, 6),
+              "trace_status": invocation["trace_status"],
+              "trace_retained": invocation["trace_retained"],
               "generation_seconds": task["generation_seconds"], "command": command,
               "result": result, "error": parse_error or (stderr.strip() if evaluator_status != "success" else None),
               "output_paths": {key: path.relative_to(ROOT).as_posix() for key, path in present.items()},
@@ -571,6 +573,24 @@ def evaluate_candidates(tasks: list[dict], workers: int, timeout: float) -> list
     for task in tasks:
         if task["spec"]["name"] == "fixed_064":
             cached = phase1_success(task["case"], task["cores"], task["plan_sha"])
+            if cached is not None and task.get("retain_trace", False):
+                source, source_path = cached
+                trace_paths = [ROOT / rel for rel in source.get("output_paths", [])
+                               if Path(rel).name.lower().startswith("trace")]
+                retained_trace_ok = any(
+                    path.is_file()
+                    and source.get("output_sha256", {}).get(path.relative_to(ROOT).as_posix())
+                    == sha256_file(path)
+                    for path in trace_paths
+                )
+                if not retained_trace_ok:
+                    # An explicitly requested trace cannot be satisfied by a
+                    # Phase 1 cache entry that discarded it; evaluate afresh.
+                    task["fingerprint"] = make_fingerprint(
+                        task["case"], task["cores"], task["plan_sha"],
+                        task["spec"], task["graph_sha"])
+                    eval_tasks.append(task)
+                    continue
             if cached is None:
                 raise RuntimeError(f"cannot safely reuse Phase 1 P1 baseline: {task['case']} cores={task['cores']}")
             source, source_path = cached
@@ -589,7 +609,8 @@ def evaluate_candidates(tasks: list[dict], workers: int, timeout: float) -> list
             continue
         task["fingerprint"] = make_fingerprint(task["case"], task["cores"], task["plan_sha"],
                                                task["spec"], task["graph_sha"])
-        cached = valid_existing_record(task["candidate_dir"] / "record.json", task["fingerprint"])
+        cached = valid_existing_record(task["candidate_dir"] / "record.json", task["fingerprint"],
+                                       require_trace=bool(task.get("retain_trace", False)))
         if cached:
             completed.append({**cached, "record_path": str(task["candidate_dir"] / "record.json"), "reused": True})
         else:
@@ -723,6 +744,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--timeout-seconds", type=float, default=600)
+    parser.add_argument("--retain-trace-cases", default="",
+                        help="comma-separated diagnosis case IDs whose successful Trace files should be kept")
     args = parser.parse_args()
     if args.workers < 1 or args.timeout_seconds <= 0:
         parser.error("workers and timeout must be positive")
@@ -738,6 +761,10 @@ def main() -> int:
     if len(diagnosis) != 10 or len(validation) != 10 or len(set(diagnosis + validation)) != 20:
         raise RuntimeError("sample groups must be 10+10, fixed and disjoint")
     specs = candidate_specs()
+    retain_trace_cases = {name.strip() for name in args.retain_trace_cases.split(",") if name.strip()}
+    unknown_trace_cases = retain_trace_cases - set(diagnosis)
+    if unknown_trace_cases:
+        parser.error(f"--retain-trace-cases must be selected diagnosis cases: {sorted(unknown_trace_cases)}")
     manifest = {"round": "phase2_problem1_round1", "algorithm_version": VERSION,
                 "base_algorithm": ALGORITHM_VERSION, "base_source_sha256": source_fingerprint(),
                 "p1_evaluator": "official/code/multicore_cut_evaluate_problem_1.py",
@@ -756,10 +783,15 @@ def main() -> int:
     invocation = {"started_at": datetime.now(timezone.utc).isoformat(), "workers": args.workers,
                   "timeout_seconds": args.timeout_seconds, "problem": "P1 only",
                   "diagnosis_case_count": 10, "validation_case_count": 10,
-                  "validation_runs": 0, "candidate_count": len(specs)}
+                  "validation_runs": 0, "candidate_count": len(specs),
+                  "trace_policy": {"default": "temporary_then_discard",
+                                   "retained_cases": sorted(retain_trace_cases),
+                                   "failures": "discard_unless_explicitly_requested"}}
     atomic_json(OUT / "last_invocation.json", invocation)
     print("Preparing plans, fixed samples and communication ledger (P1 only; official full-manifest hash scans disabled by project policy).", flush=True)
     tasks, _plan_rows = prepare_candidates(samples, specs)
+    for task in tasks:
+        task["retain_trace"] = task["case"] in retain_trace_cases
     build_ledgers(samples, specs)
     print(f"Prepared {len(tasks)} diagnosis plans; running non-reused candidates.", flush=True)
     records = evaluate_candidates(tasks, args.workers, args.timeout_seconds)

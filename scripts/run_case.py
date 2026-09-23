@@ -25,6 +25,8 @@ def main() -> int:
     parser.add_argument("--output-root", type=Path,
                         default=ROOT / "experiments" / "phase1_baseline" / "v001")
     parser.add_argument("--timeout-seconds", type=float, default=600.0)
+    parser.add_argument("--retain-trace", action="store_true",
+                        help="retain this case's Trace for timeline diagnosis")
     args = parser.parse_args()
 
     graph_path = args.case.resolve()
@@ -47,6 +49,7 @@ def main() -> int:
             graph_path=graph_path, plan_path=None, problem="singlecore", cores=1,
             case_dir=case_dir, timeout_seconds=args.timeout_seconds,
             input_hash=input_hash, generation_seconds=None, integrity_scope="none",
+            retain_trace=args.retain_trace,
         )
     plan_path, generation_seconds, plan_hash = generate_case_plan(graph_path, case_dir, args.cores)
     print(f"PLAN {graph_path.stem} cores={args.cores} sha256={plan_hash} "
@@ -56,6 +59,7 @@ def main() -> int:
             graph_path=graph_path, plan_path=plan_path, problem=str(problem), cores=args.cores,
             case_dir=case_dir, timeout_seconds=args.timeout_seconds,
             input_hash=input_hash, generation_seconds=generation_seconds, integrity_scope="none",
+            retain_trace=args.retain_trace,
         )
     return 0
 

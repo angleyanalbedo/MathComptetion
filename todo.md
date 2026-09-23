@@ -2,37 +2,45 @@
 
 ## Current status
 
-- phase: Phase 2 Problem 1 优化
-- state: complete
+- phase: Phase 2B Problem 1 Adaptive / Local Refinement
+- state: not_started
 - best_algorithm: communication_cut_plus_dependency_list_cube_vector_pipe_critical_path_priority
 - best_version: p1_cube_vector_pipe_priority_round8_v001
+- best_role: current verified P1 best / pre-local-search best / Phase 2B initial solution
 - last_experiment: v025_phase2_p1_final_ablation_closeout
-- next_step: Phase 2 已完成；下一阶段启动时先在场景 B 对比共享 baseline 与冻结 P1 best；本轮未执行 P2/P3
+- next_step: 冻结 round8 初始解和各组规则/预算；第一组 lifetime/peak-pressure 诊断 + bounded reorder，第二组 M/V/DDR 多维负载 + move/swap 独立对照，第三组仅在仍有 partition 瓶颈证据时 bounded merge/split。本轮仅更新规则与计划，未运行新 evaluator。
 
 ## 各阶段归档与精简状态
 
-本表按阶段独立维护，不随 Current status 切换而删除历史行。仅 `complete` 且归档核验为 `verified` 的阶段具备精简资格；核验记录必须包含文件保留与依赖检查依据。阶段实验验收不自动等同于精简前归档核验。
+本表按重构后的子阶段维护；历史实验和精简审计仍然有效。只有 `complete` 且归档核验为 `verified` 的阶段具备进一步精简资格，重构阶段名不代表恢复已清理的历史运行目录。
 
-| 阶段 | 实验状态 | 归档核验 | 归档位置 | 精简状态与清单 |
+| 阶段 | 实验状态 | 归档核验 | 归档位置 | 说明 |
 |---|---|---|---|---|
 | Phase 0 | complete | pending：尚未做精简前核验 | `experiments/phase0/` | 未登记精简；核验前不清理 |
-| Phase 1 | complete | verified：`experiments/phase1_baseline/v001/TRACE_ARCHIVE_AUDIT.md` | `experiments/phase1_baseline/v001/` | 已清理 1,279 个非关键 Trace（4,150,490,176 B）；保留 21 个代表 Trace；清单：`experiments/phase1_baseline/v001/trace_cleanup_manifest.csv` |
-| Phase 2 | complete | verified：final closeout + `ROUND_ARCHIVE_COMPACTION.md` + `ROUND8_RESTORATION_AUDIT.md` | `experiments/phase2_problem1/final/` | 中间历史轮次精简；保留 final 与 round8 best full。先删除 21,214 个文件，随后恢复 round8 2,800 个文件；净减少 21,038,867,101 B。清单：`round_compaction_manifest.csv` |
-| Phase 3～6 | not_started | not_applicable | 待阶段启动后分别登记 | 不适用 |
+| Phase 1 | complete | verified：`experiments/phase1_baseline/v001/TRACE_ARCHIVE_AUDIT.md` | `experiments/phase1_baseline/v001/` | 已清理 1,279 个非关键 Trace；保留 21 个代表 Trace |
+| Phase 2A P1 pre-local-search | complete | verified：final closeout + `ROUND_ARCHIVE_COMPACTION.md` + `ROUND8_RESTORATION_AUDIT.md` | `experiments/phase2_problem1/final/` + `round8_cube_vector_pipe_full/` | 历史 closeout 继续有效；作为 Phase 2B 初始解与对照 |
+| Phase 2B P1 Adaptive Refinement | not_started | not_applicable | `TBD` | 先压力诊断/reorder，再多维负载/move/swap，最后条件性 merge/split；尚未执行 |
+| Phase 2C P1 final freeze | not_started | not_applicable | `TBD` | 仅在 2B 结束后执行最终消融/冻结 |
+| Phase 3A～3D P2 | not_started | not_applicable | `TBD` | Scene B warm start → reuse/lifetime → adaptive → ablation/freeze |
+| Phase 4A～4D P3 | not_started | not_applicable | `TBD` | L2 baseline → reuse-distance/双带宽 → adaptive → ablation/freeze |
+| Phase 5 Final | not_started | not_applicable | `TBD` | 三问冻结后只做最终复核和论文输出 |
 
-- [x] P1 收尾完成后核验归档与复现依据；生成 Trace 精简清单并逐项校验 SHA-256 后清理，释放 11,175,816,124 B；保留汇总、方案、结果及 9 个代表 Trace。核验记录：`experiments/phase2_problem1/final/TRACE_ARCHIVE_AUDIT.md`
-- [x] 按用户要求精简 Phase 2 历史中间轮次 case 目录；保留 final 及当前 round8 best full。round8 原先误被纳入精简，之后由匹配历史 plan 哈希的 400 份方案重建并重跑 P1 evaluator，400/400 成功且 Makespan 与历史逐项一致。净减少 21,038,867,101 B。审计：`experiments/phase2_problem1/final/ROUND_ARCHIVE_COMPACTION.md`、`ROUND8_RESTORATION_AUDIT.md`
+- [x] P1 Phase 2A 收尾完成后核验归档与复现依据；生成 Trace 精简清单并逐项校验 SHA-256 后清理，释放 11,175,816,124 B；保留汇总、方案、结果及 9 个代表 Trace。核验记录：`experiments/phase2_problem1/final/TRACE_ARCHIVE_AUDIT.md`
+- [x] 按用户要求精简 Phase 2A 历史中间轮次 case 目录；保留 pre-local-search archive 与 round8 best full。round8 恢复审计 400/400 成功且 Makespan 与历史逐项一致。净减少 21,038,867,101 B。审计：`experiments/phase2_problem1/final/ROUND_ARCHIVE_COMPACTION.md`、`ROUND8_RESTORATION_AUDIT.md`
 
 ## Current best
 
 - current_p1_version: p1_cube_vector_pipe_priority_round8_v001
+- current_p1_role: current verified P1 best / pre-local-search best / Phase 2B initial solution
 - current_p1_equal_weight_mean_speedup_2_to_5: 1.948976
 - current_p1_legal_rate: 100% (400/400 P1 records successful)
 - current_p1_artifacts: `experiments/phase2_problem1/round8_cube_vector_pipe_full/`
 - caveat: 相对 round6 为边际 best；23 项改善、348 项持平、29 项退化，最差 Makespan +4.006%
-- closeout_archive: `experiments/phase2_problem1/final/`（含逐例表、分核统计、曲线、消融矩阵、哈希审计和复现命令）
-- closeout_audit: 7 个对照各 400/400 成功；原始 plan/input/config/evaluator/output 哈希核验通过；21 个单元测试通过
-- cache_pressure: 暂缓、未验证；没有把单切点负结果外推为方向无效
+- phase2a_closeout_archive: `experiments/phase2_problem1/final/`（历史结果仍有效；现定义为 pre-local-search closeout）
+- phase2a_closeout_audit: 7 个对照各 400/400 成功；原始 plan/input/config/evaluator/output 哈希核验通过；21 个单元测试通过
+- cache_pressure: 暂缓、未系统验证；round9 单切点负结果不能外推为 cache-aware split/merge 无效
+- current_p2_status: not_started；Phase 1 P2 speedup 仅作为 baseline reference，不登记为优化后 final best
+- current_p3_status: not_started；Phase 1 P3 speedup 仅作为 baseline reference，不登记为优化后 final best
 
 ### Phase 1 冻结基线（以下不是最新 P1 best）
 
@@ -112,7 +120,7 @@
 - [x] 单核与多核批次前后官方文件完整性校验均通过；最终复核 114 项
 - [x] Phase 1 全部验收条件满足，标记 complete；停止于 Phase 1
 
-## Phase 2 规划与待办
+## Phase 2A 已完成历史：P1 启发式构造与收尾
 
 - [x] 归档 Phase 1 算法、统计口径、复现命令和局限：`experiments/phase1_baseline/v001/README.md`（仅文档核对，未重跑实验）
 - [x] 在 `plan.md` 细化 Phase 2 分步对照、全量验证和验收规则
@@ -145,7 +153,7 @@
 - [x] 按四个核数分别报告平均 speedup、等权总体均值及逐 case 退化，round8 按预定 Best 规则保留为 P1 best
 - [x] 对最终组合完成定义明确的移除消融；round6/round2 精确复用，其余缺失项各 400/400 成功
 
-## P1 当前收尾清单
+## Phase 2A 已完成 closeout 清单
 
 - [x] 根据 round9 负结果确定收尾范围：保留当前 best，缓存方向暂缓，不启动新优化搜索
 - [x] 核对最终模块与冻结参数，建立模块移除/模块组消融矩阵，区分历史增量实验与最终组合移除消融
@@ -155,14 +163,119 @@
 - [x] 汇总消融、改善/持平/退化、搬运/spill、生成与评估耗时；历史复用记录时间与新调用分别保留，不把耗时和墙钟混淆
 - [x] 核查复现脚本及原始结果一致性；审计通过后标记 Phase 2 complete；写明 P2 场景 B 起点比较计划，本轮未执行 P2/P3
 
-## 后续阶段待办
+## Phase 2B：P1 Adaptive / Local Refinement 待办
 
-- [ ] 最终报告补齐 P3 同核数无 L2/有 L2 对比、1～5 核曲线及字节口径 Cache 命中率
-- [ ] 测试 communication-weighted merge
-- [ ] 测试 cache-aware merge/split
-- [ ] 测试 move/swap/reorder 局部搜索
-- [ ] 完成消融实验
-- [ ] 完整运行 100 cases × 2～5 cores × 3 problems
+- [ ] 锁定 round8 为 Phase 2B 初始解，记录 input/config/evaluator/plan fingerprint；不覆盖 Phase 2A 历史归档
+- [ ] 明确本阶段只调用 Problem 1 / Scene A evaluator；P2/P3 evaluator 调用数保持 0
+- [ ] 在看候选结果前冻结最大轮数、每轮候选数、evaluator-call 上限、单 case 时间预算、随机种子（如有）和 deterministic tie-break
+- [ ] 实现/核对通用候选合法性检查：节点覆盖、sgid 唯一、收缩 DAG、core schedule 唯一与依赖顺序
+- [ ] 建立 P1 bottleneck diagnosis：critical core、core finish/负载不均、partition-added、spill-added、总 added-copy、关键路径、PIPE_M/V、L1/UB pressure proxy、DDR contention proxy
+- [ ] 第一组：建立 Task 内 tensor lifetime / L1/UB peak-pressure proxy；与 evaluator 指标区分，核对可控方案变化的作用路径
+- [ ] 第一组：固定 partition/core assignment 实现 bounded reorder，独立记录 Makespan / spill / added-copy 及依赖等待、DDR 并发变化；P1 Task 间清缓存，重排不直接改变 Task 内拓扑序，不预设减少 spill
+- [ ] 第二组：以同一 round8 为对照，独立测试 M/V/DDR 多维负载与 move；L1/UB pressure 作为风险特征，不把第一组组合收益归因于本组
+- [ ] 第二组：按预先冻结的触发规则测试 swap，记录接受/拒绝原因与 evaluator 调用数；如与第一组组合，另做消融
+- [ ] 第三组进入检查：前两组后仍存在 partition 瓶颈，记录强通信边界/Task 内 spill/超大子图等证据；无依据不启用 merge/split
+- [ ] 第三组：bounded split 只测有限合法切点；bounded merge 检查 DAG、容量与并行损失；分账记录 partition-added / spill-added / Makespan
+- [ ] 第三组候选：原子计算单元/locality-preserving unit，与已失败的纯 strong-edge aggregation 区分，先独立 diagnosis 不预设有效
+- [ ] 容量系数候选独立验证：阈值集合实验前冻结，proxy 不冒充 evaluator 真峰值，不与多个新模块首次同时引入
+- [ ] 按预先规则最多冻结两个 Phase 2B 候选进入原 validation 集合；validation 后不得改规则/参数
+- [ ] validation 成立后运行 100 cases × 2/3/4/5 cores P1 全量；局部搜索新方案必须重新 evaluator
+- [ ] 汇总每个邻域：候选数、接受数、平均/最大改进、失败/超时、evaluator-call 数、搜索 wall time
+- [ ] 按既有 equal-weight mean speedup Best rule 判断是否替换 round8；禁止手工拼 case/local best
+
+## Phase 2C：P1 最终消融、冻结与归档 待办
+
+- [ ] 若 Adaptive 被采用，保留已有 Phase 2A removal ablation，并新增 `with adaptive` vs `without adaptive` 消融
+- [ ] 若多维负载、capacity safety 等进入最终算法，对每个实际采用模块补定义清楚的 removal ablation
+- [ ] 若 Phase 2B 未改进统一算法，将 Adaptive/Local Search 作为负结果归档，不重跑已有 round8 消融
+- [ ] 最终冻结 P1，生成新版 100×4 逐例、1～5 核 speedup 曲线、added-copy/spill 分账、搜索开销、失败记录和复现入口
+- [ ] Phase 2C 完成后再启动 P2；P1 未最终冻结前不得把临时候选当作 P2 唯一 warm start
+
+## Phase 3：Problem 2 / Scene B 待办
+
+### Phase 3A：P1→P2 warm start 与 Scene-B 基线
+
+- [ ] 用官方 P2 evaluator 对共享 Phase 1 baseline 与最终冻结 P1 best 做同一 100 cases × 4 cores 对比
+- [ ] 分别保存两个 P2 起点，按 P2 指标选择 warm start；不默认 P1 winner 在 P2 仍胜
+- [ ] 建立 P2 tensor ledger：同核保留、跨核 COPY、500-cycle 同步、partition-added、spill-added
+- [ ] 用合成小图核对 Scene-B 同核复用与跨核通信账本
+- [ ] 固定 P2 diagnosis/validation 集合及选择依据
+
+### Phase 3B：Scene-B-aware 结构优化
+
+- [ ] 建模有方向 producer→consumer affinity：同核 reuse bytes / 跨核 COPY+同步收益与并行损失分开记录
+- [ ] 强化合并 Task 的 L1/UB active tensor set / tensor lifetime 模型；核对 core_schedules 经 `_prioritize_task_seq` 与 Step2/3 后的实际顺序、峰值及 spill，proxy 与实际指标分开
+- [ ] 定义 release potential 候选：执行后可释放字节/未来使用距离；与 critical-path priority 单独对照
+- [ ] 测试 Scene-B 多维分核：estimated finish + reuse + cross-core bytes + PIPE_M/V + L1/UB pressure
+- [ ] 测试 capacity safety factor，防止为追求同核 reuse 导致过度驻留和 spill
+- [ ] 每个新模块先 diagnosis，筛选后冻结再 validation，不一次首次引入多个主要因素
+
+### Phase 3C：P2 Adaptive / Local Refinement
+
+- [ ] 跨核 COPY/同步高时测试 move 或与重新分核组合的 merge 使强依赖同核；同核 merge 不自动减少 COPY
+- [ ] 负载不均时测试 move/swap
+- [ ] L1/UB resident pressure 或 spill 高时先测试合法 reorder；split 仅在能改变合并 Task 内顺序或配合重新分核时测试，不创建新同核 Task、不自动清缓存、不消除同核 COPY
+- [ ] reuse 收益高但并行损失大时测试 move/swap 折中
+- [ ] 冻结 P2 邻域顺序、预算和接受规则后执行 diagnosis → validation → 100×4 full
+
+### Phase 3D：P2 消融、冻结与归档
+
+- [ ] 对进入最终 P2 算法的 affinity/reuse、lifetime/release-potential、capacity pressure、adaptive refinement 做 removal ablation
+- [ ] 冻结 P2 final，输出 1～5 核 speedup、逐 case Makespan/added-copy/spill、搜索开销和复现入口
+
+## Phase 4：Problem 3 / Scene B + 共享 L2 待办
+
+### Phase 4A：P2→P3 baseline
+
+- [ ] 固定 P2 final，在相同 case×core 下得到 no-L2(P2) 与 read-only-L2(P3) 成对结果
+- [ ] 报告 Makespan、added-copy、Cache hit bytes/eligible bytes 和字节口径 hit rate；核对 evaluator 字段
+- [ ] 选取共享输入多、DDR 密集、不同 reuse/hit 特征的 diagnosis 样本
+
+### Phase 4B：L2-aware 建模与调度
+
+- [ ] 建立 shared-input affinity，统计多核重复 COPY_IN 的逻辑 tensor 与可复用字节
+- [ ] 建立 FIFO reuse-distance / 生存距离 proxy：两次访问之间进入 Cache 的其他 tensor 累计字节；用 evaluator hit/miss 校准
+- [ ] 建立 DDR/L2 dual-bandwidth pressure proxy，分别估计 miss→DDR 与 hit→Cache 带宽竞争
+- [ ] 测试 wave-aligned reorder/assignment 候选，使共享输入访问在依赖允许时更接近；先 diagnosis，不预设有效
+- [ ] 联合约束 L2 reuse、L1/UB pressure 与多核并行；禁止只以 Cache hit rate 替代 Makespan
+
+### Phase 4C：P3 Adaptive / Local Refinement
+
+- [ ] hit 低且共享输入明显：测试 move/merge/shared-input affinity/wave-aligned reorder
+- [ ] DDR 压力高：优先减少 miss 和重复读取
+- [ ] Cache 带宽热点：避免过度同时命中造成新的 L2 带宽竞争
+- [ ] L1/UB spill 高：先测试合法 reorder；沿用 P2 split/merge 边界，说明顺序变化或重新分核如何影响生命周期/spill，不能假定拆分清缓存
+- [ ] 冻结规则与预算后执行 diagnosis → validation → 100×4 full，记录 evaluator-call 与搜索时间
+
+### Phase 4D：P3 消融、冻结与归档
+
+- [ ] 对进入 final 的 reuse-distance、dual-bandwidth、shared-input affinity、wave alignment、adaptive refinement 做 removal ablation
+- [ ] 冻结 P3 final；生成相同核数 no-L2 vs L2 曲线、`T_noL2/T_L2`、逐 case Makespan/added-copy/Cache hit rate
+
+## Phase 5：Final Evaluation & Paper Outputs 待办
+
+- [ ] 确认 P1/P2/P3 算法与参数全部冻结；本阶段禁止搜索和调参
+- [ ] 最终复核 100 cases × 2/3/4/5 cores 三问所需结果与合法率
+- [ ] 生成 P1/P2 1～5 核平均 speedup 曲线
+- [ ] 生成 P3 no-L2 vs read-only-L2 同核数曲线及 L2 相对加速比
+- [ ] 汇总 Makespan、added-copy、partition/spill、P3 Cache hit、生成/搜索/evaluator 时间、失败/超时
+- [ ] 生成三问最终算法流程图、消融总表、负结果表、逐 case 附录与复现命令
+
+## 计划重构说明
+
+- [x] 原独立 Phase 5 Local/Adaptive Search 已拆回 P1/P2/P3 各自阶段
+- [x] 原独立 Phase 6 Ablation 已拆回各问题最终冻结前；新的 Phase 5 只负责 final evaluation / paper outputs
+- [x] 将当前参考方案中“原子计算单元、多维装箱、容量安全、release potential、非对称 affinity、reuse distance、双带宽、wave alignment”等作为**待验证候选模型**加入对应问题；不把这些名称写成 CANN 官方算法名
+- [x] 本轮只修改 `plan.md` 与 `todo.md`，未运行 evaluator，未新增 experiment version，未知结果保持 TBD/未执行
+
+## 2026-09-23 CANN/GE 借鉴边界修订
+
+- [x] 同步修改 `agent.md`、`plan.md`、`todo.md`，统一为“受 CANN/GE 机制启发的赛题数学抽象与候选启发式”；没有算法定义及实现对应证据不称复现
+- [x] 明确借鉴 Fusion 局部性，不修改 op cycles、不做真实 kernel tiling、不假定 UB Fusion 指令级收益；不实现提交接口外的内存地址分配器
+- [x] 明确 P2/P3 split 不新建同核 Task、不清缓存；收益须经合法顺序变化或重新分核影响生命周期、spill、通信，并由 evaluator 验证
+- [x] 将 P1 Phase 2B 调整为三组实验优先级；补充 P1 固定 partition 的 Task reorder 不直接改变 Task 内生命周期的限制
+- [x] 核对专用 `SKILL.md` 第 40 行的 CANNBot 来源，限定为图分析工作流；在 `plan.md` 登记官方 GE/Topo 参考资料与赛题接口映射
+- [x] 本轮仅文档修订：未修改算法或 official 文件，未运行 evaluator，未新增实验版本；Phase 2B 保持 not_started，round8 best 与历史实验数值不变
 
 ## Failed ideas
 

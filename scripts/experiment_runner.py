@@ -105,7 +105,7 @@ def _reusable_success(parent: Path, fingerprint: dict) -> dict | None:
             record = json.loads(record_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        integrity_ok = (record.get("integrity_status") == "verified"
+        integrity_ok = (record.get("integrity_status") in ("verified", "not_scanned_readonly_git_hook")
                         or (record.get("integrity_status") is None
                             and record.get("integrity_pre_stdout") not in (None, "")))
         if (record.get("fingerprint") == fingerprint and record.get("status") == "success"
@@ -150,9 +150,9 @@ def run_one_evaluator(
     *, graph_path: Path, plan_path: Path | None, problem: str, cores: int,
     case_dir: Path, timeout_seconds: float, input_hash: str,
     generation_seconds: float | None, force: bool = False,
-    integrity_scope: str = "per_evaluator", batch_id: str | None = None,
+    integrity_scope: str = "none", batch_id: str | None = None,
 ) -> dict:
-    if integrity_scope not in ("per_evaluator", "batch"):
+    if integrity_scope not in ("per_evaluator", "batch", "none"):
         raise ValueError(f"unsupported integrity scope: {integrity_scope}")
     if problem == "singlecore":
         parent = case_dir / "singlecore"
@@ -211,8 +211,10 @@ def run_one_evaluator(
     timeout = False
     if integrity_scope == "per_evaluator":
         precheck_seconds, pre_out, _pre_err = verify_official()
-    else:
+    elif integrity_scope == "batch":
         precheck_seconds, pre_out = 0.0, f"covered by batch preflight {batch_id}"
+    else:
+        precheck_seconds, pre_out = 0.0, "full official manifest scan disabled by read-only/Git-hook project policy"
     timer = time.perf_counter()
     try:
         proc = subprocess.run(
@@ -231,8 +233,10 @@ def run_one_evaluator(
         _write_capture(stderr_path, stderr)
     if integrity_scope == "per_evaluator":
         postcheck_seconds, post_out, post_err = verify_official()
-    else:
+    elif integrity_scope == "batch":
         postcheck_seconds, post_out, post_err = 0.0, f"pending batch postflight {batch_id}", ""
+    else:
+        postcheck_seconds, post_out, post_err = 0.0, "full official manifest scan disabled by read-only/Git-hook project policy", ""
 
     parsed = None
     parse_error = None
@@ -267,10 +271,12 @@ def run_one_evaluator(
         "problem": problem,
         "cores": record_cores,
         "version": ALGORITHM_VERSION if problem != "singlecore" else "official_singlecore_v1",
-        "status": status if integrity_scope == "per_evaluator" else "pending_integrity",
+        "status": status if integrity_scope in ("per_evaluator", "none") else "pending_integrity",
         "evaluator_status": status,
         "integrity_scope": integrity_scope,
-        "integrity_status": "verified" if integrity_scope == "per_evaluator" else "pending",
+        "integrity_status": ("verified" if integrity_scope == "per_evaluator"
+                             else "not_scanned_readonly_git_hook" if integrity_scope == "none"
+                             else "pending"),
         "integrity_batch_id": batch_id,
         "exit_code": return_code,
         "timeout_seconds": timeout_seconds,

@@ -55,9 +55,9 @@
 - 比较必须注明问题编号、核数、用例集合、算法版本、随机种子和运行时间。
 - 不能只看平均值：必须检查失败用例、超时用例和退化最严重的用例。
 - 任何“更优”结论都必须能由保存的结果文件复现。
-- 独立运行单个 case/evaluator 时，在调用前后运行 `python scripts/verify_official_integrity.py --verify`。
-- 批量 benchmark 不按 case 重复扫描官方文件：每个连续批次开始前和结束后各校验一次（Phase 1 分为 100 个 single-core 批次和 1200 个 multi-core 批次）。批次内结果标记为 pending，只有批次后校验通过才可计为已验证结果；若后校验失败，停止评估并将该批次结果标为无效，不覆盖或刷新基线。
-- 任一完整性校验失败都必须停止后续官方评估，不得通过刷新基线规避。
+- `official/` 已由用户设置为只读，并由 Git 保护钩子保护；常规单 case 和 benchmark 不运行 `verify_official_integrity.py --verify`，也不做批次前后全目录 manifest 扫描。
+- 实验记录仍保存必要的 case、配置、算法、方案和 evaluator 指纹及实验输出哈希，用于复现与断点续跑；这些针对性指纹不等同于全目录完整性扫描。
+- 只有用户要求核验、只读权限/保护钩子状态发生变化，或发现官方文件可能被修改时，才显式运行一次 `python scripts/verify_official_integrity.py --verify`；若此时校验失败，停止 evaluator 并报告，不刷新基线。
 - 不使用 `git commit --no-verify` 绕过保护钩子；只有用户明确要求修正官方文件时，才走单独的基线更新流程。
 
 ## 每轮闭环

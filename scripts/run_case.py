@@ -46,7 +46,7 @@ def main() -> int:
         run_one_evaluator(
             graph_path=graph_path, plan_path=None, problem="singlecore", cores=1,
             case_dir=case_dir, timeout_seconds=args.timeout_seconds,
-            input_hash=input_hash, generation_seconds=None,
+            input_hash=input_hash, generation_seconds=None, integrity_scope="none",
         )
     plan_path, generation_seconds, plan_hash = generate_case_plan(graph_path, case_dir, args.cores)
     print(f"PLAN {graph_path.stem} cores={args.cores} sha256={plan_hash} "
@@ -55,7 +55,7 @@ def main() -> int:
         run_one_evaluator(
             graph_path=graph_path, plan_path=plan_path, problem=str(problem), cores=args.cores,
             case_dir=case_dir, timeout_seconds=args.timeout_seconds,
-            input_hash=input_hash, generation_seconds=generation_seconds,
+            input_hash=input_hash, generation_seconds=generation_seconds, integrity_scope="none",
         )
     return 0
 

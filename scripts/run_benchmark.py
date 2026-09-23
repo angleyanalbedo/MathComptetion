@@ -16,8 +16,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from experiment_runner import (  # noqa: E402
     ALGORITHM_VERSION, CONFIG, CORE_COUNTS, PARAMETERS, PROBLEMS,
-    IntegrityError, atomic_json, finalize_batch_integrity, generate_case_plan,
-    run_one_evaluator, sha256_file, source_fingerprint, verify_official,
+    atomic_json, generate_case_plan, run_one_evaluator, sha256_file, source_fingerprint,
 )
 from summarize_benchmark import summarize  # noqa: E402
 
@@ -121,9 +120,8 @@ def main() -> int:
     print(f"START mode={args.mode} cases={len(selected)} timeout={args.timeout_seconds}s "
           f"algorithm={ALGORITHM_VERSION}", flush=True)
 
-    # One guard scan brackets the complete single-core batch, not each case.
-    single_batch_id = f"singlecore-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
-    verify_official()
+    # Official full-manifest scans are disabled by project policy; official/
+    # is user-set read-only and protected by the repository Git hook.
     single_records: list[dict] = []
     singles_to_run = []
     for graph_path in selected:
@@ -136,7 +134,7 @@ def main() -> int:
                 graph_path=graph_path, plan_path=None, problem="singlecore", cores=1,
                 case_dir=case_dir, timeout_seconds=args.timeout_seconds,
                 input_hash=graph_hash, generation_seconds=None,
-                integrity_scope="batch", batch_id=single_batch_id,
+                integrity_scope="none",
             ): graph_path.stem
             for graph_path, case_dir, graph_hash in singles_to_run
         }
@@ -145,11 +143,9 @@ def main() -> int:
             if not record.get("reused"):
                 single_records.append(record)
             print(f"CHECKPOINT singlecore {index}/{len(futures)} case={futures[future]}", flush=True)
-    finalize_batch_integrity(single_records, single_batch_id)
     summarize(output_root, case_paths)
 
-    # Prepare all deterministic plans, then bracket the complete multi-core batch
-    # with one preflight and one postflight integrity scan.
+    # Prepare deterministic plans; no full official manifest scan is performed.
     multi_tasks = []
     for graph_path in selected:
         case_dir = output_root / "cases" / graph_path.stem
@@ -161,8 +157,6 @@ def main() -> int:
             for problem in PROBLEMS:
                 multi_tasks.append((graph_path, plan_path, problem, cores, case_dir,
                                     graph_hash, generation_seconds))
-    multi_batch_id = f"multicore-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
-    verify_official()
     multi_records: list[dict] = []
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         futures = {
@@ -171,7 +165,7 @@ def main() -> int:
                 graph_path=graph_path, plan_path=plan_path, problem=str(problem), cores=cores,
                 case_dir=case_dir, timeout_seconds=args.timeout_seconds,
                 input_hash=graph_hash, generation_seconds=generation_seconds,
-                integrity_scope="batch", batch_id=multi_batch_id,
+                integrity_scope="none",
             ): (graph_path.stem, problem, cores)
             for graph_path, plan_path, problem, cores, case_dir, graph_hash, generation_seconds in multi_tasks
         }
@@ -181,7 +175,6 @@ def main() -> int:
                 multi_records.append(record)
             case, problem, cores = futures[future]
             print(f"CHECKPOINT multi {index}/{len(futures)} case={case} P{problem} cores={cores}", flush=True)
-    finalize_batch_integrity(multi_records, multi_batch_id)
     summarize(output_root, case_paths)
 
     invocation["finished_at"] = datetime.now(timezone.utc).isoformat()

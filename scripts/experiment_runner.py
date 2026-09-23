@@ -105,9 +105,13 @@ def _reusable_success(parent: Path, fingerprint: dict) -> dict | None:
             record = json.loads(record_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
+        integrity_ok = (record.get("integrity_status") == "verified"
+                        or (record.get("integrity_status") is None
+                            and record.get("integrity_pre_stdout") not in (None, "")))
         if (record.get("fingerprint") == fingerprint and record.get("status") == "success"
+                and integrity_ok
                 and _outputs_intact(record)):
-            return {**record, "reused": True}
+            return {**record, "reused": True, "record_path": str(record_path)}
     return None
 
 
@@ -146,7 +150,10 @@ def run_one_evaluator(
     *, graph_path: Path, plan_path: Path | None, problem: str, cores: int,
     case_dir: Path, timeout_seconds: float, input_hash: str,
     generation_seconds: float | None, force: bool = False,
+    integrity_scope: str = "per_evaluator", batch_id: str | None = None,
 ) -> dict:
+    if integrity_scope not in ("per_evaluator", "batch"):
+        raise ValueError(f"unsupported integrity scope: {integrity_scope}")
     if problem == "singlecore":
         parent = case_dir / "singlecore"
         evaluator = OFFICIAL / "code" / "singlecore_evaluate.py"
@@ -202,7 +209,10 @@ def run_one_evaluator(
     return_code: int | None = None
     elapsed = 0.0
     timeout = False
-    precheck_seconds, _pre_out, _pre_err = verify_official()
+    if integrity_scope == "per_evaluator":
+        precheck_seconds, pre_out, _pre_err = verify_official()
+    else:
+        precheck_seconds, pre_out = 0.0, f"covered by batch preflight {batch_id}"
     timer = time.perf_counter()
     try:
         proc = subprocess.run(
@@ -219,7 +229,10 @@ def run_one_evaluator(
         elapsed = time.perf_counter() - timer
         _write_capture(stdout_path, stdout)
         _write_capture(stderr_path, stderr)
-    postcheck_seconds, post_out, post_err = verify_official()
+    if integrity_scope == "per_evaluator":
+        postcheck_seconds, post_out, post_err = verify_official()
+    else:
+        postcheck_seconds, post_out, post_err = 0.0, f"pending batch postflight {batch_id}", ""
 
     parsed = None
     parse_error = None
@@ -254,14 +267,18 @@ def run_one_evaluator(
         "problem": problem,
         "cores": record_cores,
         "version": ALGORITHM_VERSION if problem != "singlecore" else "official_singlecore_v1",
-        "status": status,
+        "status": status if integrity_scope == "per_evaluator" else "pending_integrity",
+        "evaluator_status": status,
+        "integrity_scope": integrity_scope,
+        "integrity_status": "verified" if integrity_scope == "per_evaluator" else "pending",
+        "integrity_batch_id": batch_id,
         "exit_code": return_code,
         "timeout_seconds": timeout_seconds,
         "timeout": timeout,
         "generation_seconds": generation_seconds,
         "evaluator_seconds": round(elapsed, 6),
         "integrity_check_seconds": round(precheck_seconds + postcheck_seconds, 6),
-        "integrity_pre_stdout": _pre_out,
+        "integrity_pre_stdout": pre_out,
         "integrity_post_stdout": post_out,
         "integrity_post_stderr": post_err,
         "command": command,
@@ -271,13 +288,44 @@ def run_one_evaluator(
         "output_paths": [path.relative_to(ROOT).as_posix() for path in output_paths],
         "output_sha256": relative_output_hashes,
     }
-    atomic_json(attempt_dir / "record.json", record)
+    record_path = attempt_dir / "record.json"
+    atomic_json(record_path, record)
+    record["record_path"] = str(record_path)
     print(
         f"{status.upper()} {graph_path.stem} {problem} cores={record_cores} "
         f"seconds={elapsed:.3f} makespan={result.get('makespan', '')}",
         flush=True,
     )
     return record
+
+
+def finalize_batch_integrity(records: list[dict], batch_id: str) -> None:
+    """Promote pending evaluator statuses only after the batch postflight passes."""
+    try:
+        elapsed, stdout, stderr = verify_official()
+        verification_ok = True
+        error = None
+    except IntegrityError as exc:
+        elapsed, stdout, stderr = 0.0, "", ""
+        verification_ok = False
+        error = str(exc)
+    for returned in records:
+        path = Path(returned["record_path"])
+        record = json.loads(path.read_text(encoding="utf-8"))
+        if record.get("integrity_batch_id") != batch_id:
+            continue
+        record["integrity_post_seconds"] = round(elapsed, 6)
+        record["integrity_post_stdout"] = stdout
+        record["integrity_post_stderr"] = stderr
+        record["integrity_status"] = "verified" if verification_ok else "failed"
+        record["status"] = record["evaluator_status"] if verification_ok else "failed"
+        if not verification_ok:
+            record["error"] = f"batch integrity postflight failed: {error}"
+        atomic_json(path, record)
+        returned["status"] = record["status"]
+        returned["integrity_status"] = record["integrity_status"]
+    if not verification_ok:
+        raise IntegrityError(f"official integrity failed after batch {batch_id}: {error}")
 
 
 def generate_case_plan(graph_path: Path, case_dir: Path, cores: int) -> tuple[Path, float, str]:

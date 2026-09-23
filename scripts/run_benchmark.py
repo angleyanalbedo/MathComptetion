@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 import json
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,8 +16,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from experiment_runner import (  # noqa: E402
     ALGORITHM_VERSION, CONFIG, CORE_COUNTS, PARAMETERS, PROBLEMS,
-    IntegrityError, atomic_json, evaluator_fingerprint, run_one_evaluator,
-    sha256_file, source_fingerprint,
+    IntegrityError, atomic_json, finalize_batch_integrity, generate_case_plan,
+    run_one_evaluator, sha256_file, source_fingerprint, verify_official,
 )
 from summarize_benchmark import summarize  # noqa: E402
 
@@ -60,7 +62,7 @@ def ensure_experiment_manifest(output_root: Path, case_paths: list[Path], timeou
     if path.exists():
         existing = json.loads(path.read_text(encoding="utf-8"))
         for key in ("algorithm_version", "algorithm_sha256", "parameters", "config_sha256",
-                    "official_manifest_sha256", "cases", "core_counts", "problems"):
+                    "cases", "core_counts", "problems"):
             if existing.get(key) != manifest.get(key):
                 raise RuntimeError(f"existing experiment manifest differs at {key}: {path}")
         return
@@ -73,9 +75,13 @@ def main() -> int:
     parser.add_argument("--output-root", type=Path,
                         default=ROOT / "experiments" / "phase1_baseline" / "v001")
     parser.add_argument("--timeout-seconds", type=float, default=600.0)
+    parser.add_argument("--workers", type=int, default=min(4, max(1, (os.cpu_count() or 2) - 1)),
+                        help="parallel evaluator processes; default reserves CPU capacity")
     args = parser.parse_args()
     if args.timeout_seconds <= 0:
         parser.error("--timeout-seconds must be positive")
+    if args.workers <= 0:
+        parser.error("--workers must be positive")
 
     output_root = args.output_root.resolve()
     if not output_root.is_relative_to(ROOT):
@@ -108,50 +114,75 @@ def main() -> int:
         "mode": args.mode,
         "started_at": datetime.now(timezone.utc).isoformat(),
         "timeout_seconds": args.timeout_seconds,
+        "workers": args.workers,
         "selected_cases": [path.stem for path in selected],
     }
     atomic_json(output_root / "last_invocation.json", invocation)
     print(f"START mode={args.mode} cases={len(selected)} timeout={args.timeout_seconds}s "
           f"algorithm={ALGORITHM_VERSION}", flush=True)
 
-    # Run one single-core reference for each case before multi-core comparisons.
-    for index, graph_path in enumerate(selected, 1):
-        case_dir = output_root / "cases" / graph_path.stem
-        try:
-            run_one_evaluator(
+    # One guard scan brackets the complete single-core batch, not each case.
+    single_batch_id = f"singlecore-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    verify_official()
+    single_records: list[dict] = []
+    singles_to_run = []
+    for graph_path in selected:
+        singles_to_run.append((graph_path, output_root / "cases" / graph_path.stem,
+                               sha256_file(graph_path)))
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        futures = {
+            pool.submit(
+                run_one_evaluator,
                 graph_path=graph_path, plan_path=None, problem="singlecore", cores=1,
                 case_dir=case_dir, timeout_seconds=args.timeout_seconds,
-                input_hash=sha256_file(graph_path), generation_seconds=None,
-            )
-        except IntegrityError:
-            raise
-        if index % 10 == 0 or index == len(selected):
-            print(f"CHECKPOINT singlecore {index}/{len(selected)}", flush=True)
+                input_hash=graph_hash, generation_seconds=None,
+                integrity_scope="batch", batch_id=single_batch_id,
+            ): graph_path.stem
+            for graph_path, case_dir, graph_hash in singles_to_run
+        }
+        for index, future in enumerate(as_completed(futures), 1):
+            record = future.result()
+            if not record.get("reused"):
+                single_records.append(record)
+            print(f"CHECKPOINT singlecore {index}/{len(futures)} case={futures[future]}", flush=True)
+    finalize_batch_integrity(single_records, single_batch_id)
     summarize(output_root, case_paths)
 
-    evaluations_per_case = len(CORE_COUNTS) * len(PROBLEMS)
-    completed = 0
-    for index, graph_path in enumerate(selected, 1):
+    # Prepare all deterministic plans, then bracket the complete multi-core batch
+    # with one preflight and one postflight integrity scan.
+    multi_tasks = []
+    for graph_path in selected:
         case_dir = output_root / "cases" / graph_path.stem
         graph_hash = sha256_file(graph_path)
         for cores in CORE_COUNTS:
-            from experiment_runner import generate_case_plan
             plan_path, generation_seconds, plan_hash = generate_case_plan(graph_path, case_dir, cores)
             print(f"PLAN {graph_path.stem} cores={cores} sha256={plan_hash} "
                   f"generation_seconds={generation_seconds:.6f}", flush=True)
             for problem in PROBLEMS:
-                try:
-                    run_one_evaluator(
-                        graph_path=graph_path, plan_path=plan_path, problem=str(problem), cores=cores,
-                        case_dir=case_dir, timeout_seconds=args.timeout_seconds,
-                        input_hash=graph_hash, generation_seconds=generation_seconds,
-                    )
-                except IntegrityError:
-                    raise
-                completed += 1
-        summarize(output_root, case_paths)
-        print(f"CHECKPOINT multi {index}/{len(selected)} "
-              f"evaluations={completed}/{len(selected) * evaluations_per_case}", flush=True)
+                multi_tasks.append((graph_path, plan_path, problem, cores, case_dir,
+                                    graph_hash, generation_seconds))
+    multi_batch_id = f"multicore-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    verify_official()
+    multi_records: list[dict] = []
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        futures = {
+            pool.submit(
+                run_one_evaluator,
+                graph_path=graph_path, plan_path=plan_path, problem=str(problem), cores=cores,
+                case_dir=case_dir, timeout_seconds=args.timeout_seconds,
+                input_hash=graph_hash, generation_seconds=generation_seconds,
+                integrity_scope="batch", batch_id=multi_batch_id,
+            ): (graph_path.stem, problem, cores)
+            for graph_path, plan_path, problem, cores, case_dir, graph_hash, generation_seconds in multi_tasks
+        }
+        for index, future in enumerate(as_completed(futures), 1):
+            record = future.result()
+            if not record.get("reused"):
+                multi_records.append(record)
+            case, problem, cores = futures[future]
+            print(f"CHECKPOINT multi {index}/{len(futures)} case={case} P{problem} cores={cores}", flush=True)
+    finalize_batch_integrity(multi_records, multi_batch_id)
+    summarize(output_root, case_paths)
 
     invocation["finished_at"] = datetime.now(timezone.utc).isoformat()
     atomic_json(output_root / "last_invocation.json", invocation)

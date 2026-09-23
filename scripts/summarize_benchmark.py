@@ -57,7 +57,10 @@ def _latest_records(output_root: Path, case_paths: list[Path]) -> dict[tuple[str
         if not _is_current_record(record, by_case[record["case"]],
                                   case_hashes[record["case"]], config_hash, code_hash):
             continue
-        key = (record["case"], record["problem"], int(record["cores"]))
+        problem = record["problem"]
+        if problem in ("1", "2", "3"):
+            problem = f"problem_{problem}"
+        key = (record["case"], problem, int(record["cores"]))
         old = latest.get(key)
         if old is None or record.get("started_at", "") > old.get("started_at", ""):
             latest[key] = record

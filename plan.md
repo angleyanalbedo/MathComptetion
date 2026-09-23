@@ -50,7 +50,7 @@ Phase 0 禁止：
 
 - `src/` 中拆分实现图读取、op 依赖构造/拓扑排序、连续切图、greedy 核分配、方案输出。
 - `scripts/run_case.py` 单 case 闭环；`scripts/run_benchmark.py` 全量运行、匹配指纹的成功断点续跑和失败记录；汇总工具输出逐项表、12 组统计和分析。
-- `experiments/phase1_baseline/v001/` 保存冻结参数/配置标识、方案、单核和多核原始结果、命令、耗时、退出状态、日志、Trace、失败记录、CSV 与报告。
+- `experiments/phase1_baseline/v001/` 保存冻结参数/配置标识、方案、单核和多核原始结果、命令、耗时、退出状态、日志、Trace、失败记录、CSV 与报告。每个 benchmark 阶段批次开始和结束各做一次官方完整性校验；批次未通过后校验的记录不得计为成功。
 
 #### Phase 1 完成条件（全部满足）
 
@@ -58,7 +58,7 @@ Phase 0 禁止：
 - 正式 case 的单核评估 100/100 成功。
 - 100 cases × 4 核数 × 3 problems 共 1200 项均通过对应官方 evaluator，合法率 100%，没有失败或超时。
 - 逐项结果、12 组统计、三问独立的 case/core best 登记、失败/退化分析、命令和算法/输入/配置指纹齐全且可复现。
-- `official/` 完整性检查在每次 evaluator 前后均通过。
+- `official/` 完整性检查在单核批次和多核批次开始、结束时均通过。
 
 任一条件未满足时保持 Phase 1 `in_progress`，明确列出未完成项；本阶段完成后停止，不自动进入 Phase 2。
 

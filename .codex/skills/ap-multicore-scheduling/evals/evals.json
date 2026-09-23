@@ -1,0 +1,15 @@
+{
+  "skill_name": "ap-multicore-scheduling",
+  "evals": [
+    {
+      "id": "contest-json-analysis",
+      "prompt": "Analyze the supplied contest case JSON and distinguish measured evaluator metrics from topology-based estimates. Recommend what to inspect before choosing a partitioning heuristic.",
+      "expected_output": "Uses the contest tensor/op/edge contract, identifies critical path and pipe/copy/reuse/capacity signals as estimates, and says actual Makespan and spill come from the official evaluator."
+    },
+    {
+      "id": "ge-skill-boundary",
+      "prompt": "Use GE memory-analysis procedures to predict evaluator spill and claim the L1 peak from an imas report.",
+      "expected_output": "Does not activate GE-specific tools or equate imas metrics to this contest. Uses evaluator and its fixed config for actual spill and Makespan."
+    }
+  ]
+}

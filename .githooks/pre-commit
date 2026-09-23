@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+# Once a baseline commit exists, protect the manifest and the guard itself too.
+if git rev-parse --verify HEAD >/dev/null 2>&1; then
+  if ! git diff --cached --quiet HEAD -- \
+    protection/official-files.sha256 \
+    scripts/verify_official_integrity.py \
+    .githooks/pre-commit; then
+    printf '%s\n' 'Blocked: official integrity policy files cannot be changed through an ordinary commit.' >&2
+    exit 1
+  fi
+fi
+
+python scripts/verify_official_integrity.py --verify

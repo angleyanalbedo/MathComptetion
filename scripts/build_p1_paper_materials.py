@@ -272,7 +272,9 @@ def main() -> None:
         ax.bar_label(bars, fmt="%.4f", fontsize=6, padding=2)
     ax.axhline(1, color="#9ca3af", lw=1, ls="--")
     ax.set_xticks(x, [f"{c}核" for c in CORES]); ax.set_ylabel("平均逐 case speedup（倍）")
-    ax.set_title("P1：各核数平均逐 case 加速比（100 个正式 case）")
+    ax.set_title("P1：阶段版本整体对照（不是单模块消融）")
+    ax.text(.5, -.16, "100 个正式 case；版本逐步累积改动，模块贡献见最终组合消融图",
+            ha="center", va="top", fontsize=8, transform=ax.transAxes)
     ax.legend(frameon=False); ax.grid(axis="y", alpha=.2); fig.tight_layout()
     fig.savefig(OUT / "fig1_speedup_by_core.png"); plt.close(fig)
 
@@ -289,7 +291,9 @@ def main() -> None:
         for cx, val in zip(CORES, vals): ax.annotate(f"{val:.2f}", (cx, val), xytext=(0, 7), textcoords="offset points", ha="center", fontsize=8)
     ax.axhline(1, color="#9ca3af", lw=1, ls="--", label="Phase 1 baseline = 1")
     ax.set_xticks(CORES, [f"{c}核" for c in CORES]); ax.set_ylabel("平均 Makespan / baseline 平均 Makespan")
-    ax.set_title("P1：平均 Makespan 对照（100 个正式 case）")
+    ax.set_title("P1：阶段版本平均 Makespan 比率（非单模块归因）")
+    ax.text(.5, -.17, "各版本为阶段性整体方案；比率基于各自平均 Makespan，单模块移除对照见图6",
+            ha="center", va="top", fontsize=8, transform=ax.transAxes)
     ax.legend(frameon=False); ax.grid(alpha=.2); fig.tight_layout()
     fig.savefig(OUT / "fig2_makespan_ratio.png"); plt.close(fig)
 
@@ -447,6 +451,12 @@ Problem 1 将每个子图作为独立 Task，并由官方模拟器依据数据�
 
 相对 Phase 1 baseline 的逐 case Makespan 改善数分别为 2 核 {sum(r['pipe_priority_makespan'] < r['baseline_makespan'] for r in joined if r['cores']==2)}/100、3 核 {sum(r['pipe_priority_makespan'] < r['baseline_makespan'] for r in joined if r['cores']==3)}/100、4 核 {sum(r['pipe_priority_makespan'] < r['baseline_makespan'] for r in joined if r['cores']==4)}/100、5 核 {sum(r['pipe_priority_makespan'] < r['baseline_makespan'] for r in joined if r['cores']==5)}/100。全量中最大改善为 {best['case']} / {best['cores']} 核（降幅 {-best['pipe_priority_makespan_change_vs_baseline_percent']:.2f}%），最大退化为 {bad['case']} / {bad['cores']} 核（增加 {bad['pipe_priority_makespan_change_vs_baseline_percent']:.2f}%）；均为事后选出的解释案例，不是独立验证集。
 
+## 最终组合消融与限制
+
+七组版本均为 100 cases × 4 核、400/400 成功。相对最终组合，移除 Cube/Vector 修正（复用 round6）后等权平均 speedup 为 **1.948670**；移除关键路径尾长为 **1.899225**；移除通信感知切点并改用固定 256-op 切图为 **1.354964**；移除依赖调度及其下游优先级模块组、改用通信切图+贪心分核为 **1.804826**。最后一项是模块组消融，不应解释成依赖调度单个模块的独立因果效应。Cube/Vector 修正相对 round6 的逐项结果是 23 改善、348 持平、29 退化，最差 `case_060 × 5核` Makespan +4.006%。
+
+最终方案平均额外搬运为 **15,954,046.20 B**（partition-added **12,020,257.72 B**，spill **3,933,788.48 B**）。一般缓存压力感知切图**暂缓、未验证**；round9 的单切点扰动负结果不代表该方向整体无效。本 Phase 2 P1 已完成，本材料不含 P2/P3 评估。
+
 ## 指标定义和统计口径
 
 - `Makespan`：官方 evaluator 完成事件模拟后的最晚完成周期数，越小越好。
@@ -458,8 +468,8 @@ Problem 1 将每个子图作为独立 Task，并由官方模拟器依据数据�
 
 ## 图表清单
 
-1. `fig1_speedup_by_core.png`：按核数对比五种阶段方案的平均逐 case speedup。
-2. `fig2_makespan_ratio.png`：各方案平均 Makespan 相对 baseline 平均值的比率。
+1. `fig1_speedup_by_core.png`：按核数对比五个阶段性整体版本；它们是逐步演进的方案，不代表单模块贡献，单模块移除对照见图6。
+2. `fig2_makespan_ratio.png`：阶段性整体版本的平均 Makespan 比率；仅作整体版本对照，不作单模块归因。
 3. `fig3_case_change_distribution.png`：最新候选逐 case Makespan 降幅分布；箱线图为显示隐藏离群点，原始 400 项均在 CSV 中。
 4. `fig4_copy_vs_makespan.png`：最新候选含 spill 的额外搬运量与相对 baseline Makespan 降幅散点图，每点对应 case×核数。
 5. `fig5_method_pipeline.png`：更新后的 Cube/Vector 关键路径流程图。
@@ -467,7 +477,7 @@ Problem 1 将每个子图作为独立 Task，并由官方模拟器依据数据�
 7. `fig7_round8_vs_round6_counts.png`：Pipe 修正相对 round6 的改善/持平/退化数量。
 8. `fig8_speedup_curve_1_to_5.png`：最终方案 1–5 核加速比曲线，1 核采用单核参考。
 
-每张结果图范围均为 100 个正式 case、P1、2–5 核；数据来源为官方 evaluator 的保存结果。汇总和逐 case 表提供作图数值，可用于在论文软件中重绘。
+除最终方案曲线图包含单核参考外，每张结果图范围均为 100 个正式 case、P1、2–5 核；数据来源为官方 evaluator 的保存结果。图1、图2展示阶段性整体版本的历史对照，不能据此声称某一个模块的独立贡献；模块移除对照以图6及其逐 case/按核数 CSV 为准。汇总和逐 case 表提供作图数值，可用于在论文软件中重绘。
 
 ## 数据来源与复现
 
@@ -483,7 +493,7 @@ Problem 1 将每个子图作为独立 Task，并由官方模拟器依据数据�
 
 ## 可直接用于论文的结论措辞（需作者核对）
 
-“在固定配置下，对 100 个正式计算图、2–5 核共 400 个 P1 case×核数组合进行官方模拟评估。最终通信感知切图与依赖/关键路径/Cube-Vector 优先级方案全部通过评估，等权平均 speedup 为 {pooled:.6f}。相对 round6，Cube/Vector 修正仅带来约 +0.016% 的边际变化；400 项中 23 项改善、348 项持平、29 项退化。消融显示，移除通信切点后等权 speedup 降至 1.354964，移除关键路径尾长后为 1.899225。缓存压力方向尚未验证。”
+“在固定配置下，对 100 个正式计算图、2–5 核共 400 个 P1 case×核数组合进行官方模拟评估。最终通信感知切图与依赖/关键路径/Cube-Vector 优先级方案全部通过评估，等权平均 speedup 为 {pooled:.6f}。相对 round6，Cube/Vector 修正仅带来约 +0.016% 的边际变化；400 项中 23 项改善、348 项持平、29 项退化。最终组合消融中，移除 Cube/Vector 修正、关键路径尾长、通信切点、依赖调度模块组后的等权 speedup 分别为 1.948670、1.899225、1.354964、1.804826。缓存压力方向尚未验证。”
 
 该表述是对本地实验数据的描述，不表示赛题官方计分规则或外部硬件上的真实加速承诺。
 '''
